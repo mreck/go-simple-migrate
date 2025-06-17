@@ -3,6 +3,8 @@ package gosimplemigrate_test
 import (
 	"context"
 	"database/sql"
+	"embed"
+	"os"
 	"sort"
 	"testing"
 
@@ -12,33 +14,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func getTables(db *sql.DB) ([]string, error) {
-	rows, err := db.Query(`
-		SELECT name
-		FROM sqlite_schema
-		WHERE type = 'table'
-		AND name NOT LIKE 'sqlite_%'`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+var (
+	//go:embed *.sql
+	sqlFS embed.FS
+)
 
-	var tables []string
-	for rows.Next() {
-		var s string
-		err := rows.Scan(&s)
-		if err != nil {
-			return nil, err
-		}
-		tables = append(tables, s)
+func TestCreateMigrationsFromEmbedFS(t *testing.T) {
+	expected := []smig.Migration{
+		{"sqlite.migrations.sql", ""},
 	}
-	err = rows.Err()
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(tables)
 
-	return tables, nil
+	for i, e := range expected {
+		b, err := os.ReadFile(e.Key)
+		assert.Nil(t, err)
+		e.Script = string(b)
+		expected[i] = e
+	}
+
+	m, err := smig.CreateMigrationsFromEmbedFS(sqlFS)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, m)
 }
 
 func TestMigrateFS(t *testing.T) {
@@ -69,4 +64,33 @@ func TestMigrateFS(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, []string{"migrations", "test_1", "test_2", "test_3"}, tables)
 	}
+}
+
+func getTables(db *sql.DB) ([]string, error) {
+	rows, err := db.Query(`
+		SELECT name
+		FROM sqlite_schema
+		WHERE type = 'table'
+		AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var s string
+		err := rows.Scan(&s)
+		if err != nil {
+			return nil, err
+		}
+		tables = append(tables, s)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(tables)
+
+	return tables, nil
 }

@@ -19,7 +19,7 @@ type Migration struct {
 }
 
 func CreateMigrationsFromEmbedFS(fs embed.FS) ([]Migration, error) {
-	dents, err := fs.ReadDir("*.sql")
+	dents, err := fs.ReadDir(".")
 	if err != nil {
 		return nil, fmt.Errorf("reading FS failed: %w", err)
 	}
