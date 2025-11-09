@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 type Migration struct {
