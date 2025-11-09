@@ -3,70 +3,79 @@ package gosimplemigrate_test
 import (
 	"context"
 	"database/sql"
-	"embed"
+	"fmt"
 	"os"
 	"sort"
 	"testing"
 
-	smig "github.com/mreck/go-simple-migrate"
+	gsm "github.com/mreck/go-simple-migrate"
+	msqlite3 "github.com/mreck/go-simple-migrate/testutils/migrations_sqlite3"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 )
 
-var (
-	//go:embed *.sql
-	sqlFS embed.FS
-)
+func Test_CreateMigrationsFromEmbedFS(t *testing.T) {
+	m, err := gsm.CreateMigrationsFromEmbedFS(msqlite3.FS)
+	assert.NoError(t, err)
+	assert.NotNil(t, m)
 
-func TestCreateMigrationsFromEmbedFS(t *testing.T) {
-	expected := []smig.Migration{
-		{"sqlite.migrations.sql", ""},
-	}
+	assert.Equal(t, m[0].Key, "001.sql")
+	assert.Equal(t, m[1].Key, "002.sql")
 
-	for i, e := range expected {
-		b, err := os.ReadFile(e.Key)
-		assert.Nil(t, err)
-		e.Script = string(b)
-		expected[i] = e
-	}
-
-	m, err := smig.CreateMigrationsFromEmbedFS(sqlFS)
-	assert.Nil(t, err)
-	assert.Equal(t, expected, m)
+	assert.Equal(t, m[0].Script, mustReadFile("testutils/migrations_sqlite3/001.sql"))
+	assert.Equal(t, m[1].Script, mustReadFile("testutils/migrations_sqlite3/002.sql"))
 }
 
-func TestMigrateFS(t *testing.T) {
+func Test_CreateMigrationsFromDir(t *testing.T) {
+	m, err := gsm.CreateMigrationsFromDir("testutils/migrations_sqlite3")
+	assert.NoError(t, err)
+	assert.NotNil(t, m)
+
+	assert.Equal(t, m[0].Key, "001.sql")
+	assert.Equal(t, m[1].Key, "002.sql")
+
+	assert.Equal(t, m[0].Script, mustReadFile("testutils/migrations_sqlite3/001.sql"))
+	assert.Equal(t, m[1].Script, mustReadFile("testutils/migrations_sqlite3/002.sql"))
+}
+
+func Test_MigrateFS(t *testing.T) {
 	ctx := context.Background()
 
 	db, err := sql.Open("sqlite3", ":memory:")
+	assert.NoError(t, err)
 	assert.Nil(t, err)
 
-	m := []smig.Migration{
-		{"1", "CREATE TABLE test_1 (id INT)"},
-		{"2", "CREATE TABLE test_2 (id INT)"},
+	m, err := gsm.CreateMigrationsFromEmbedFS(msqlite3.FS)
+	assert.NoError(t, err)
+	assert.NotNil(t, m)
+
+	for i := range 3 {
+		t.Run(fmt.Sprintf("[%d]", i), func(t *testing.T) {
+			err := gsm.Migrate(ctx, "sqlite3", db, m)
+			assert.Nil(t, err)
+
+			tables, err := getTablesSqlite(db)
+			assert.Nil(t, err)
+			assert.Equal(t, []string{"migrations", "test_1", "test_2"}, tables)
+		})
 	}
 
-	for range 2 {
-		err := smig.Migrate(ctx, "sqlite3", db, m)
-		assert.Nil(t, err)
-		tables, err := getTables(db)
-		assert.Nil(t, err)
-		assert.Equal(t, []string{"migrations", "test_1", "test_2"}, tables)
-	}
+	m = append(m, gsm.Migration{"3", "CREATE TABLE test_3 (id INT)"})
 
-	m = append(m, smig.Migration{"3", "CREATE TABLE test_3 (id INT)"})
+	for i := range 3 {
+		t.Run(fmt.Sprintf("[%d]", i), func(t *testing.T) {
+			err := gsm.Migrate(ctx, "sqlite3", db, m)
+			assert.Nil(t, err)
 
-	for range 2 {
-		err := smig.Migrate(ctx, "sqlite3", db, m)
-		assert.Nil(t, err)
-		tables, err := getTables(db)
-		assert.Nil(t, err)
-		assert.Equal(t, []string{"migrations", "test_1", "test_2", "test_3"}, tables)
+			tables, err := getTablesSqlite(db)
+			assert.Nil(t, err)
+			assert.Equal(t, []string{"migrations", "test_1", "test_2", "test_3"}, tables)
+		})
 	}
 }
 
-func getTables(db *sql.DB) ([]string, error) {
+func getTablesSqlite(db *sql.DB) ([]string, error) {
 	rows, err := db.Query(`
 		SELECT name
 		FROM sqlite_schema
@@ -93,4 +102,12 @@ func getTables(db *sql.DB) ([]string, error) {
 	sort.Strings(tables)
 
 	return tables, nil
+}
+
+func mustReadFile(filename string) string {
+	b, err := os.ReadFile(filename)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
 }

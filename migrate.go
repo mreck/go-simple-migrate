@@ -69,7 +69,7 @@ func CreateMigrationsFromDir(dir string) ([]Migration, error) {
 			continue
 		}
 
-		b, err := os.ReadFile(dent.Name())
+		b, err := os.ReadFile(filepath.Join(dir, dent.Name()))
 		if err != nil {
 			return nil, fmt.Errorf("reading file '%s' failed: %w", dent.Name(), err)
 		}
