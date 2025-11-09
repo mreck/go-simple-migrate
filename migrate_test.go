@@ -48,7 +48,7 @@ func TestMigrateFS(t *testing.T) {
 	}
 
 	for range 2 {
-		err := smig.Migrate(ctx, db, m)
+		err := smig.Migrate(ctx, "sqlite3", db, m)
 		assert.Nil(t, err)
 		tables, err := getTables(db)
 		assert.Nil(t, err)
@@ -58,7 +58,7 @@ func TestMigrateFS(t *testing.T) {
 	m = append(m, smig.Migration{"3", "CREATE TABLE test_3 (id INT)"})
 
 	for range 2 {
-		err := smig.Migrate(ctx, db, m)
+		err := smig.Migrate(ctx, "sqlite3", db, m)
 		assert.Nil(t, err)
 		tables, err := getTables(db)
 		assert.Nil(t, err)

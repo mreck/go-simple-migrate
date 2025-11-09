@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,10 @@ type Migration struct {
 	Key    string
 	Script string
 }
+
+var (
+	ErrDBNotSupported = errors.New("database not supported")
+)
 
 func CreateMigrationsFromEmbedFS(fs embed.FS) ([]Migration, error) {
 	dents, err := fs.ReadDir(".")
@@ -82,13 +87,21 @@ func CreateMigrationsFromDir(dir string) ([]Migration, error) {
 	return m, nil
 }
 
-func Migrate(ctx context.Context, db *sql.DB, ms []Migration) error {
+func Migrate(ctx context.Context, driverName string, db *sql.DB, ms []Migration) error {
+	var migrationsFilename string
+	switch driverName {
+	case "sqlite3":
+		migrationsFilename = "sqlite.migrations.sql"
+	default:
+		return ErrDBNotSupported
+	}
+
 	err := db.PingContext(ctx)
 	if err != nil {
 		return fmt.Errorf("pinging db failed: %w", err)
 	}
 
-	b, err := migrationsFS.ReadFile("sqlite.migrations.sql")
+	b, err := migrationsFS.ReadFile(migrationsFilename)
 	if err != nil {
 		return fmt.Errorf("reading migrations table script failed: %w", err)
 	}
